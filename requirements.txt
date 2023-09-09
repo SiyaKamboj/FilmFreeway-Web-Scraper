@@ -1,6 +1,5 @@
 bs4
 BeautifulSoup
-datetime
 requests
 time
 pandas
