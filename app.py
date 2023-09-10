@@ -235,16 +235,16 @@ while currLinkIdx<len(festival_links):
 
 #the number of columns is Festival Name, Deadline Label, Deadline, and all categories
 numOfColumns= 4 + (maxNumOfCategoriesChosen-1)
-st.write("MaxNumberofCategoriesChosen is " + str(maxNumOfCategoriesChosen))
-st.write("number of columns is " + str(numOfColumns))
+#st.write("MaxNumberofCategoriesChosen is " + str(maxNumOfCategoriesChosen))
+#st.write("number of columns is " + str(numOfColumns))
 #make sure that the column headers are accurate
 index=len(Column_Headers)
 while(index<numOfColumns):
     Column_Headers.append(' ')
     #Column_Headers.append('debug')
     index=index+1
-st.write("These are column headers: ") #debug
-st.write(Column_Headers) #debug
+#st.write("These are column headers: ") #debug
+#st.write(Column_Headers) #debug
 
 #ensure each row has complete data filled into the columns
 i=0
@@ -277,10 +277,8 @@ csv = convert_df(df)
 
 #adding a download button to download csv file
 st.download_button( 
-    label="Download data as CSV. Open it in excel later",
+    label="Download data as CSV. Open it in excel later :)",
     data=csv,
     file_name='Film_Festivals.csv',
     mime='text/csv',
 )
-
-
