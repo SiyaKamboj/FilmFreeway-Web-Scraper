@@ -2,3 +2,4 @@ bs4
 requests
 pyxlsb
 xlsxwriter
+streamlit==0.51
