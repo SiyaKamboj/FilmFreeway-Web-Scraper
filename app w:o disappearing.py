@@ -113,61 +113,6 @@ def choose_payment(paymentOptionsParam):
             return answer
         
 
-def print_payment_options(all_li, name, col_index, row_index):
-    paymentcontainer = st.empty()
-    paymentOptions=[]
-    stringReturnValue=' '
-    with paymentcontainer.container():
-        for index, current_li in enumerate(all_li):
-            #if the current li is not outdated (aka if the deadline has NOT already passed), then consider it as viable payment option
-            if 'is-outdated' not in current_li['class']:
-                #Only consider deadline and payment option
-                if 'CategoryName' in current_li['class'] or 'Fee' in current_li['class']:
-                    #If the current element is a deadline label/name
-                    if 'CategoryName' in current_li['class']:
-                        currentDeadlineName = current_li.text.strip()
-                        
-                        st.markdown('<h6 style="color:purple"> For submitting your film to the ' + name.text + ' category by the '+ currentDeadlineName + ' deadline, here are the payment options </h6>', unsafe_allow_html=True)
-                    #If the current element is a payment option, print it out and after printing it out, ask the user which payment option they want
-                    elif 'Fee' in current_li['class']:
-                        #st.write("\t\t" + str(len(paymentOptions)+1) + ". "+ current_li.text.replace('\n', ' '))
-                        st.markdown("<h6 style='color:purple'>" + str(len(paymentOptions)+1) + ". "+ current_li.text.replace('\n', ' ')+ "</h6>", unsafe_allow_html=True)
-                        
-                        paymentOptions.append(current_li.text.replace('\n', ' '))
-                        #if the next element is a category element, then that means there are no more payment options so you ask user for which payment option they want to go with
-                        next = index + 1
-                        if next <= len(all_li) :
-                            #avoid index out of bounds error at the end
-                            if (next==len(all_li) or 'Fee' not in all_li[next]['class']):
-                                user_ans= choose_payment(paymentOptions)
-                                while user_ans==None:
-                                    time.sleep(0.5)
-                                if user_ans!=None:
-                                    st.info("You chose payment option " + paymentOptions[user_ans-1])
-                                    stringReturnValue+=paymentOptions[user_ans-1] + ','
-                                    #st.info(f''':violet[You chose payment option '{returnValue}']''')
-                                #This way, you only append once per label
-                                if (col_index<=0):
-                                    chosen_payment.append([]) 
-                                row_index=row_index+1
-                                chosen_payment[row_index].append(paymentOptions[user_ans-1]) 
-                                paymentOptions=[]  
-                                #increment to move onto the next deadline
-    #clear all info about payment options
-    paymentcontainer.empty()
-    returnValue=[]
-    returnValue.append(stringReturnValue) 
-    returnValue.append(col_index)
-    #returnValue.append(chosen_payment)
-    #returnValue.append(row_index)
-    #Here is how to interpret returnValue:
-    #   returnValue[0] = stringReturnValue
-    #   returnValue[1]=column index
-    #   returnValue[2]=chosen_payment
-    #st.write("\n Here is how info is stored in 2D array in print options function")
-    #st.write(chosen_payment)
-    return returnValue                             
-
 
 
         
@@ -177,6 +122,7 @@ def print_payment_options(all_li, name, col_index, row_index):
 #(1) Asks the user which categories they will submit to
 #(2) Asks the user which payment method they would want to explore
 #@st.cache_data
+placeholder = st.empty()
 def find_all_categories(row_index, col_index):
     global ans
     global maxNumOfCategoriesChosen
@@ -187,8 +133,7 @@ def find_all_categories(row_index, col_index):
     CategoryDescriptions = [div.find('div') for div in soup.findAll('div', attrs={'class':'profile-categories__content'})]
     #loop through each category and see if the user wants to apply to it
     for name, description in zip(CategoryNames, CategoryDescriptions):
-        container = st.empty()
-        container.markdown('<h3> Category: ' + name.text.strip() + '</h3> \n' + '<h5>' + description.text.strip() + '</h5>', unsafe_allow_html=True)
+        st.markdown('<h3> Category: ' + name.text.strip() + '</h3> \n' + '<h5>' + description.text.strip() + '</h5>', unsafe_allow_html=True)
         #st.markdown('<h5>' + description.text.strip() + '</h5>', unsafe_allow_html=True)
         ans = include_category()
         #If the user wants to apply to the category, ask for which payment option they want to explore
@@ -196,28 +141,57 @@ def find_all_categories(row_index, col_index):
             #as long as there is no answer, execution is delayed by 0.5 seconds
             time.sleep(0.5)
         if ans==True:
-            #st.info("You are applying to the category: " + name.text)
-            st.info(f''':green[You are applying to the category: {name.text}]''')
-            
+            st.info("You are applying to the category: " + name.text)
+            #container.empty()
             chosen_categories.append(name.text)
             #Access <ul class="ProfileDeadlines Small"> to get the payment options
             all_profile_deadlines= description.next.next.next
             #print(all_profile_deadlines.text)
             all_li = all_profile_deadlines.findChildren()
-            user_ans=print_payment_options(all_li, name, col_index, row_index)
-            st.info(f''':violet[You chose payment option(s) '{user_ans[0]}' for all the deadlines in '{name.text}' category]''') 
+            paymentOptions=[]
+            for index, current_li in enumerate(all_li):
+                #if the current li is not outdated (aka if the deadline has NOT already passed), then consider it as viable payment option
+                if 'is-outdated' not in current_li['class']:
+                    #Only consider deadline and payment option
+                    if 'CategoryName' in current_li['class'] or 'Fee' in current_li['class']:
+                        #If the current element is a deadline label/name
+                        if 'CategoryName' in current_li['class']:
+                            currentDeadlineName = current_li.text.strip()
+                            
+                            st.markdown('<h6 style="color:purple"> For submitting your film to the ' + name.text + ' category by the '+ currentDeadlineName + ' deadline, here are the payment options </h6>', unsafe_allow_html=True)
+                        #If the current element is a payment option, print it out and after printing it out, ask the user which payment option they want
+                        elif 'Fee' in current_li['class']:
+                            #st.write("\t\t" + str(len(paymentOptions)+1) + ". "+ current_li.text.replace('\n', ' '))
+                            st.markdown("<h6 style='color:purple'>" + str(len(paymentOptions)+1) + ". "+ current_li.text.replace('\n', ' ')+ "</h6>", unsafe_allow_html=True)
+                            
+                            paymentOptions.append(current_li.text.replace('\n', ' '))
+                            #if the next element is a category element, then that means there are no more payment options so you ask user for which payment option they want to go with
+                            next = index + 1
+                            if next <= len(all_li) :
+                                #avoid index out of bounds error at the end
+                                if (next==len(all_li) or 'Fee' not in all_li[next]['class']):
+                                    user_ans= choose_payment(paymentOptions)
+                                    while user_ans==None:
+                                        time.sleep(0.5)
+                                    if user_ans!=None:
+                                        st.info("You chose payment option '" + paymentOptions[user_ans-1] + "' for '" + name.text+ "' category")
+                                    #This way, you only append once per label
+                                    if (col_index<=0):
+                                        chosen_payment.append([]) 
+                                    row_index=row_index+1
+                                    chosen_payment[row_index].append(paymentOptions[user_ans-1])
+                                    #clear the payment options so you can prepare for the next category's options
+                                    paymentOptions=[]
+                                    #increment to move onto the next deadline
             #increment to move onto the next category
-            #user_ans[1]=column index
-            col_index=user_ans[1]+1
+            col_index=col_index+1; 
             row_index=-1; 
-            #user_ans[2]= chosen payment
-            #chosen_payment=user_ans[2]
         elif ans==False:
-            st.info(f''':red[You are NOT applying to the category: {name.text}]''') 
+            st.info("You are NOT applying to the category: " + name.text) 
+            #container.empty()
         #decrease size as u traverse to avoid large data structure
-        container.empty()
-        #CategoryNames.remove(name)
-        #CategoryDescriptions.remove(description)
+        CategoryNames.remove(name)
+        CategoryDescriptions.remove(description)
      
                                         
                 
