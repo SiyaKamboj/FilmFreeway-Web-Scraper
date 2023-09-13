@@ -11,16 +11,23 @@ Given a list of links to film festivals, this app web scrapes each link to retri
 - The outputted csv/spreadsheet can be difficult to read and needs to be formatted
 
 ## Version 2 (Current Version) 
-### Exciting Updates
+### Updates :)
 - You can now add a single link without needing to insert a csv file with multiple links  
 - You do NOT need to submit to at least one category per film festival. If needed, you can select no categories for a film festival and program will not break
 - Film Festival event dates and submission links are on the spreadsheet/csv file
 - Downloaded data is formatted as xlxs as well, so the final resulting spreadsheet is more aesthetically pleasing
-### Limitations
+### Limitations :(
 - Does not work for Sundance Film Festival because the deadlines do not apply for ALL the categories
 - If you are uploading multiple links via csv, the delimiter between unique links MUST be a newline character, and the only contents of the csv can be the links and the new line delimiters between them. Otherwise, the website cannot read it. 
 - Submission Format, WP, and location need to be manually added to the final data spreadsheet 
 - The website still needs to be tested with other filmfreeway links
+
+##Version 3 (Current Version)
+### Updates :)
+- Rather than keeping all the text from previous categories, this new version deletes it and only keeps 2 lines that indicates whether or not you are applying to the category and which payment options you chose (if you are applying). This was achieved using st.empty() containers. This is also supposed to speed up the website when you are entering a lot of links
+
+### Limitations :(
+- Still need to test it out on festivals like Cannes 
 
    
 
