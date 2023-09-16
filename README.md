@@ -48,4 +48,4 @@ Given a list of links to film festivals, this app web scrapes each link to retri
 - Submission Format, WP, and location need to be manually added to the final data spreadsheet 
 ### Future Work!
 - Curently, the information is getting stored in a excel file that the user downloads on their device. In the future, I could store the information in a database so it is available for the user at any time (even if the excel file gets lost) and is synced between different users
-- Beautify the spreadsheet more so that it is more organized and easier to read
+- Beautify the spreadsheet more so that it is more organized and easier to read. Right now, the spreadsheet looks best when you submit one link at a time. As you upload more links, the spreadsheet looks more disorganized and needs more manual cleaning
