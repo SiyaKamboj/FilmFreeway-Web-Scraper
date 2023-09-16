@@ -335,7 +335,7 @@ def choose_num_of_festival_links():
     placeholder = st.empty()
     with placeholder.container():
         #st.write(str(categoryapplicationuniquekey))
-        st.write("How many links do you want to submit to?")
+        st.write("How many FilmFreeway links do you want to submit?")
         col1, col2 = st.columns(2)
         with col1:
             one_button=st.button("One")
