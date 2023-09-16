@@ -46,6 +46,7 @@ Given a list of links to film festivals, this app web scrapes each link to retri
 
 ### Future Work!
 - Curently, the information is getting stored in a excel file that the user downloads on their device. In the future, I could store the information in a database so it is available for the user at any time (even if the excel file gets lost) and is synced between different users
+- I think I can beautify the spreadsheet a little bit more
 
    
 
