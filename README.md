@@ -22,14 +22,14 @@ Given a list of links to film festivals, this app web scrapes each link to retri
 - Submission Format, WP, and location need to be manually added to the final data spreadsheet 
 - The website still needs to be tested with other filmfreeway links
 
-##Version 3
+## Version 3
 ### Updates :)
 - Rather than keeping all the text from previous categories, this new version deletes it and only keeps 2 lines that indicates whether or not you are applying to the category and which payment options you chose (if you are applying). This was achieved using st.empty() containers. This is also supposed to speed up the website when you are entering a lot of links
 
 ### Limitations :(
 - Still need to test it out on festivals like Cannes 
 
-##Version 4 (Current Version)
+## Version 4 (Current Version)
 ### Updates :)
 - Cache-ing the request url and soup method to avoid too much storage at every re-run
 - Rather than storing all the categories and descriptions in an array and traversing it, I created variables and am parsing by reassigning the variable to the next category/description
