@@ -22,12 +22,30 @@ Given a list of links to film festivals, this app web scrapes each link to retri
 - Submission Format, WP, and location need to be manually added to the final data spreadsheet 
 - The website still needs to be tested with other filmfreeway links
 
-##Version 3 (Current Version)
+##Version 3
 ### Updates :)
 - Rather than keeping all the text from previous categories, this new version deletes it and only keeps 2 lines that indicates whether or not you are applying to the category and which payment options you chose (if you are applying). This was achieved using st.empty() containers. This is also supposed to speed up the website when you are entering a lot of links
 
 ### Limitations :(
 - Still need to test it out on festivals like Cannes 
+
+##Version 4 (Current Version)
+### Updates :)
+- Cache-ing the request url and soup method to avoid too much storage at every re-run
+- Rather than storing all the categories and descriptions in an array and traversing it, I created variables and am parsing by reassigning the variable to the next category/description
+- Replaced the radio choices with buttons to avoid (1) storing too many session states (2) reruns
+- I removed messages for “You are applying to x category” and “You are not applying to x category” to improve speed for festivals like Cannes
+- Cannes no longer crashes even if you say yes to every category!
+- If the user submits multiple filmfreeway links, rather than only allowing the user to download one big excel file at the end, I am asking them to download an excel file after each film festival so that not all progress is lost if the app crashes unexpectedly
+- Rather than using xlsx writer, I am using openpyxl to create and download the word document because openpyxl allowed you to write to an existing excel file instead of creating my own
+
+### Limitations :(
+- Does not work for Sundance or Brooklyn because not all the deadlines apply to each category, so the program breaks
+- Does not work for Cork or Montclair Film Festival because the website has not been updated, and last year's dates are still on the site. Since the website ignores past deadlines, the program will not pull any information from it
+- It still needs to be tested some more to see how much data is getting used by streamlit, since we have a limit of 1 GB
+
+### Future Work!
+- Curently, the information is getting stored in a excel file that the user downloads on their device. In the future, I could store the information in a database so it is available for the user at any time (even if the excel file gets lost) and is synced between different users
 
    
 

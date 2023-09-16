@@ -1,20 +1,315 @@
 #Run streamlit environemnt locally: https://docs.streamlit.io/library/get-started/installation
 #df documentation: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html
+# Import the libraries BeautifulSoup and os
 import streamlit as st
-from bs4 import BeautifulSoup
-from datetime import datetime
+from bs4 import BeautifulSoup as bs
 import requests
+from datetime import datetime
 import time
-import pandas as pd
-import numpy as np
+import openpyxl
+from openpyxl.styles import Color, PatternFill, Font, Border, Alignment, Border, Side
+from openpyxl.styles import colors
+from openpyxl.cell import Cell
 from io import StringIO
-from io import BytesIO
-from pyxlsb import open_workbook as open_xlsb
 
-festival_links=[]
+
+#Cache it so that it doesn't request the url again and again and mess up storage
+@st.cache_resource
+def request_url(Link):
+    try:
+        page_to_scrape = requests.get(Link.strip())
+    except:
+        st.write("Unable to retrieve the next link: " + Link.strip())
+        st.write("There is possibly an issue with the csv file/link you uploaded")
+    soup = bs(page_to_scrape.text, "html.parser")
+    return soup
+
+
+def print_payment_options(categoryDescDiv, categoryName, numChosenCategories):
+    sheet=st.session_state.sheet
+    workbook=st.session_state.workbook
+    paymentcontainer = st.empty()
+    containerToWriteTo=paymentcontainer.container()
+
+    #for writing to file
+    ascii_value_of_current_category=ord('F')+numChosenCategories-1
+    #should if you have uploaded 2 or more film festival links- not coded though
+    row_to_write_to=st.session_state.nextLineToWriteOn+1
+
+    all_profile_deadlines=categoryDescDiv.findChild('ul' , recursive=False)
+    all_li = all_profile_deadlines.findChildren()
+    paymentOptions=0
+    dictOfButtons={}
+    ReturnValue=""
+    paymentOptionChosen=""
+    numDeadlines=0
+    numButtons=1
+    for index, current_li in enumerate(all_li):
+        with containerToWriteTo:
+            #if it has not already passed
+            if 'is-outdated' not in current_li['class']:
+                #Only consider deadline and payment option
+                if 'CategoryName' in current_li['class'] or 'Fee' in current_li['class']:
+                    #If the current element is a deadline label/name
+                    if 'CategoryName' in current_li['class']:
+                        currentDeadlineName = current_li.text.strip()
+                        numDeadlines=numDeadlines+1
+                        st.markdown('<h5 style="color:purple"> '+ str(numDeadlines)+ '. "'+ currentDeadlineName + '" deadline </h5>', unsafe_allow_html=True)
+                        st.markdown('<h6 style="color:violet"> For submitting your film to the ' + categoryName + ' category by the <span style="color:white">'+ currentDeadlineName + ' </span>deadline, here are the payment options </h6>', unsafe_allow_html=True)
+                    #If the current element is a payment option, print it out and after printing it out, ask the user which payment option they want
+                    elif 'Fee' in current_li['class']:
+                        paymentOptions=paymentOptions+1
+                        currOption=current_li.text.replace("\n", " ")
+                        dictOfButtons[currOption] = st.button(f''':violet[{numButtons}. {currOption}\n{categoryName}]''')
+                        numButtons=numButtons+1
+                        #if the next element is a category element, then that means there are no more payment options 
+                        next = index + 1
+                        if next <= len(all_li) :
+                            #avoid index out of bounds error at the end
+                            if (next==len(all_li) or 'Fee' not in all_li[next]['class']):
+                                #if True is a dictionary value, that means that a button has been pressed
+                                while True not in dictOfButtons.values():
+                                    time.sleep(0.5)
+                                #identify which key has the value of true. This key is the key that was selected and represents the user's payment choice
+                                for key, value in dictOfButtons.items():
+                                    if value == True:
+                                        #key is the chosen payment option
+                                        ReturnValue+=key + ','
+
+                                        #write to workbook
+                                        #add payment option to the workbook and then move onto the next row
+                                        currRowPayment=str(row_to_write_to)
+                                        #worksheet.write(chr(ascii_value_of_current_category)+currRowPayment, key)
+                                        st.session_state.sheet[chr(ascii_value_of_current_category)+currRowPayment]=key
+                                        row_to_write_to=row_to_write_to+1
+                                        
+                                        paymentOptions=0
+                                        dictOfButtons={}
+                                        
+                                        #clear the paymentcontainer and create a new one to write to
+                                        paymentcontainer.empty()
+                                        containerToWriteTo=paymentcontainer.container()
+                                        #continue
+                                        break
+    paymentcontainer.empty()
+    return ReturnValue
+            
+
+                                   
+                                
+
+def ask_about_categories(soup, ascii_value_of_col_of_first_category,value_of_row_to_write_to):
+    workbook=st.session_state.workbook
+    sheet=st.session_state.sheet
+    DivOfCategories=soup.find('ul', attrs={'class':'ProfileCategories'})
+    #grab the first <li data-ga-category= Festival Show - Sidebar>, which is the div that contains the information for the first category
+    currCategoryDiv= DivOfCategories.findChild("li", recursive=False)
+    currNumOfCategoriesChosen=0
+    totalNumOfCategories=0
+    while currCategoryDiv!=None:
+        #Deal with category name
+        #(1)grab first child div which should be <div class="profile-categories__title">
+        #(2)grab the first span which has the class festival-category-name which should contain the name of the category
+        container=st.empty()
+        with container.container():
+        
+            name=currCategoryDiv.findAll('div', attrs={'class':'profile-categories__title'}, recursive=False)[0].findAll('span', attrs={'class':'festival-category-name'}, recursive=False)[0]
+
+            #Deal with category description
+            #find the first occurence of <div class="profile-categories_content">
+            currCategoryDescriptionDiv=currCategoryDiv.findAll('div', attrs={'class':'profile-categories__content'}, recursive=False)[0]
+            description=currCategoryDescriptionDiv.findChild('div' , recursive=False)
+            totalNumOfCategories=totalNumOfCategories+1
+            st.markdown('<h3> Category '+ str(totalNumOfCategories)+ ': ' + name.text.strip() + '</h3> \n' + '<h5>' + description.text.strip() + '</h5>', unsafe_allow_html=True)
+            
+            
+            st.write("Do you want to apply to this category?")
+            col1, col2 = st.columns(2)
+            with col1:
+                yes_button=st.button(f''':green[Yes, apply to {name.text.strip()}]''')
+            with col2:
+                no_button=st.button(f''':red[No, do not apply to {name.text.strip()}]''')
+            while not yes_button and not no_button:
+                time.sleep(0.5)
+
+        if yes_button or no_button:
+            container.empty()
+            if yes_button:
+                #st.info(f''':green[You are applying to the category: {name.text}]''')
+
+                #write to the workbook
+                #add category name into the workbook
+                currentCell= chr(ascii_value_of_col_of_first_category+currNumOfCategoriesChosen)+str(st.session_state.nextLineToWriteOn)
+                #worksheet.write(currentCell, name.text)
+                st.session_state.sheet[currentCell]=name.text
+                #move to the next column
+                currNumOfCategoriesChosen=currNumOfCategoriesChosen+1
+
+                paymentChoices= print_payment_options(currCategoryDescriptionDiv, name.text.strip(), currNumOfCategoriesChosen)
+                st.info(f''':violet[You chose payment option(s) '{paymentChoices}' for all the deadlines in] :green['{name.text}'] :violet[category]''') 
+            #else:
+                #st.info(f''':red[You are NOT applying to the category: {name.text}]''')
+
+        #move onto next category
+        currCategoryDiv= currCategoryDiv.find_next_sibling("li")
+        #break
+
+    if currNumOfCategoriesChosen >= st.session_state.maxNumOfCategories:
+       st.session_state.maxNumOfCategories=currNumOfCategoriesChosen   
+    return currNumOfCategoriesChosen
+
+def changeSubmissionState(nameOfFestSubmitted, maincontainer):
+    st.session_state.submitted = nameOfFestSubmitted
+    st.session_state.downloaded = True
+    maincontainer.empty()
+
+def runFilmFestivals(link):
+    sheet=st.session_state.sheet
+    workbook=st.session_state.workbook
+    maincontainer=st.empty()
+    with maincontainer.container():
+        #htmlOfLink='Slamdance.html'
+        soup=request_url(link)
+        present = datetime.now()
+
+        NameOfFestival= soup.find('a', attrs={"data-ga-label":"Festival Name"})
+        st.markdown('<h1 style="color:blue;">' + NameOfFestival.text.strip() + '</h1>', unsafe_allow_html=True)
+
+
+
+        #the column where the first category will go is column F
+        ascii_value_of_col_of_first_category=ord('F')
+        #we just wrote to the header, so now we want to write to the next row
+        value_of_row_to_write_to=st.session_state.nextLineToWriteOn
+
+        numOfCategoriesChosen=ask_about_categories(soup,ascii_value_of_col_of_first_category,value_of_row_to_write_to)
+
+        #move onto the next line after having printed all category names
+        value_of_row_to_write_to= st.session_state.nextLineToWriteOn +1
+
+        #Find all the deadline timings
+        Deadlines = soup.findAll('time', attrs={'class':'ProfileFestival-datesDeadlines-time'})
+        #Find all the deadline names
+        DeadlineLabels = soup.findAll('div', attrs={"class":"ProfileFestival-datesDeadlines-deadline"})
+
+        for deadline, deadlinelabel in zip(Deadlines, DeadlineLabels):
+            if(deadlinelabel.text.strip() == "Event Date"):
+                eventdate=deadline.text.strip()
+
+
+        #value_of_row_to_write_to=value_of_row_to_write_to+1
+        numOfDeadlinesPrinted=0
+        for deadline, deadlinelabel in zip(Deadlines, DeadlineLabels):
+            #the event date does not follow strptime properties
+            #notification date is unnecessary
+            if(deadlinelabel.text.strip() != "Event Date" and deadlinelabel.text.strip() != "Notification Date"):
+                #convert the date from text into datetime format
+                currentdate= datetime.strptime(deadline.text.strip(), "%B %d, %Y")
+                #if the deadline has not already passed then it is added to 
+                # the file
+                if (currentdate>present):
+                    #write to the worksheet
+                    currRow=str(value_of_row_to_write_to)
+                    #worksheet.write('D'+currRow, deadlinelabel.text.strip())
+                    #worksheet.write('E'+currRow, deadline.text.strip())
+                    st.session_state.sheet['D'+currRow]=deadlinelabel.text.strip()
+                    st.session_state.sheet['E'+currRow]=deadline.text.strip()
+                    value_of_row_to_write_to= value_of_row_to_write_to +1
+                    #increment number of deadlines printed
+                    numOfDeadlinesPrinted=numOfDeadlinesPrinted + 1
+
+        #write to workbook
+        #merge cells for currFestName, currFestDate, and currFestLink
+       
+        value_of_row_to_write_to=st.session_state.nextLineToWriteOn+1
+        endingRow=value_of_row_to_write_to + numOfDeadlinesPrinted -1
+        if endingRow > value_of_row_to_write_to:
+            #worksheet.merge_range('A'+ str(value_of_row_to_write_to)+ '\:A'+ str(endingRow),    NameOfFestival.text.strip(), merge_format)
+            #worksheet.merge_range('B'+ str(value_of_row_to_write_to)+ '\:B'+ str(endingRow),    eventdate, merge_format)
+            #worksheet.merge_range('C'+ str(value_of_row_to_write_to)+ '\:C'+ str(endingRow),  link , merge_format)
+            st.session_state.sheet.merge_cells(start_row=value_of_row_to_write_to, start_column=1, end_row=endingRow, end_column=1)
+            st.session_state.sheet.merge_cells(start_row=value_of_row_to_write_to, start_column=2, end_row=endingRow, end_column=2)
+            st.session_state.sheet.merge_cells(start_row=value_of_row_to_write_to, start_column=3, end_row=endingRow, end_column=3)
+        #if there is only one deadline, then no need to merge any rows
+        #AND after merging rows, write information to it
+        st.session_state.sheet['A'+str(value_of_row_to_write_to)] = NameOfFestival.text.strip()
+        st.session_state.sheet['B'+str(value_of_row_to_write_to)]=eventdate
+        st.session_state.sheet['C'+str(value_of_row_to_write_to)]=link
+
+        #the number of columns is Festival Name, Deadline Label, Deadline, and all categories. if no categories were chosen, then only 6 columns should be present
+        if st.session_state.maxNumOfCategories>0:
+            numOfColumns= 6 + (st.session_state.maxNumOfCategories-1)
+        else:
+            numOfColumns= 6
+        
+        
+        rangeOfWorksheet='A1:' + chr(ord('@')+numOfColumns)+ str(numOfDeadlinesPrinted+2)
+        #change column width
+        st.session_state.sheet.column_dimensions['A'].width = 17
+        st.session_state.sheet.column_dimensions['B'].width = 17
+        st.session_state.sheet.column_dimensions['C'].width = 23
+        st.session_state.sheet.column_dimensions['D'].width = 18
+        st.session_state.sheet.column_dimensions['E'].width = 16
+        #change column width of all categories
+        i=0
+        while i<st.session_state.maxNumOfCategories:
+            currentColToChange=chr(ord('F')+i)
+            #print("current col to change: " + str(currentColToChange))
+            st.session_state.sheet.column_dimensions[currentColToChange].width = 16
+            i=i+1
+
+        # set header format to gray background, increase font size and increase bottom border
+        grayFill = PatternFill(start_color='D0CECE', end_color='D0CECE',
+                       fill_type='solid')
+        fontStyle = Font(size = "14", bold=True)
+        for cell in st.session_state.sheet[1:1]:
+            cell.fill = grayFill
+            cell.font = fontStyle
+
+        #align all cells center
+        for col in st.session_state.sheet.columns:
+            for cell in col:
+                # openpyxl styles aren't mutable,
+                # so you have to create a copy of the style, modify the copy, then set it back
+                if cell.value is None:
+                    blackFill = PatternFill("solid", fgColor="000000")
+                    cell.fill=blackFill
+                else:
+                    alignment_obj = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                    thin = Side(border_style="thin", color="000000")
+                    cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                    cell.alignment = alignment_obj
+        #both row 1 and column A frozen
+        st.session_state.sheet.freeze_panes = "B2"
+
+        st.session_state.workbook.save("ExcelFile.xlsx")
+    
+    dowloadbtncontainer=st.empty()
+    with dowloadbtncontainer:
+        _="""Download the formatted excel sheet"""
+        st.write("Done with collecting data. Please wait a couple minutes as your data gets downloaded")
+        with open("ExcelFile.xlsx", "rb") as template_file:
+            template_byte = template_file.read()
+        #adding download button to dowload excel file
+        st.download_button(
+            label='📥 Download Result(s) as Excel Sheet', 
+            data=template_byte ,
+            file_name= 'Excel_Film_Festivals.xlsx',
+            on_click=changeSubmissionState(link, maincontainer)
+        )
+    st.session_state.downloadbtn=dowloadbtncontainer
+    #number of deadlines + categories + next line to write on
+    st.session_state.nextLineToWriteOn= st.session_state.nextLineToWriteOn+ numOfDeadlinesPrinted+1+1
+
+    
+
+
 def uploadcsv():
-    uploaded_file = st.file_uploader("Choose a csv file that has filmfreeway links to film festivals. The delimiter MUST be a newline character", type={"csv", "txt"})
+    placeholder=st.empty()
+    with placeholder.container():
+        uploaded_file = placeholder.file_uploader("Choose a csv file that has filmfreeway links to film festivals. The delimiter MUST be a newline character", type={"csv", "txt"})
     if uploaded_file is not None:
+        placeholder.empty()
         # To read file as string:
         stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
         string_data = stringio.read()
@@ -25,499 +320,107 @@ def uploadcsv():
         return None
 
 def insertsinglelink():
-    Festlink = st.text_input('Please enter ONLY one filmfreeway url')
-    submit_button = st.button("Submit Link")
+    placeholder2=st.empty()
+    with placeholder2.container():
+        Festlink = st.text_input('Please enter ONLY one filmfreeway url')
+        submit_button = st.button("Submit Link")
     if submit_button: 
         if Festlink is not None:
+            placeholder2.empty()
             return Festlink
+        
 
 def choose_num_of_festival_links():
+    festival_links=[]
     placeholder = st.empty()
-
-    with placeholder.container().form("numOfFestivals"):
+    with placeholder.container():
         #st.write(str(categoryapplicationuniquekey))
-        answer = st.radio(
-        "How many filmfreeway festival links do you want to submit?",
-        ["1", "More Than 1"])
-        submit_button = st.form_submit_button("Submit Final Answer")
-
-        if submit_button:
-            placeholder.empty() 
-            if answer=="1":
-                return True
-            elif answer=="More Than 1":
-                return False
-
-numOfFests= choose_num_of_festival_links()
-while numOfFests is None:
-    time.sleep(0.5)
-
-if numOfFests==True:
-    singleLink=insertsinglelink()
-    while singleLink is None:
-        time.sleep(0.5)
-    #once single link has a vlue in it then append it to the end of festival_links
-    festival_links.append(singleLink)
-else:
-    festival_links=uploadcsv()
-    while festival_links is None:
-        time.sleep(0.5)
-
-
-#All the festivals we want to add into the spreadsheet
-categoryapplicationuniquekey=0
-paymentoptionuniquekey=0
-ans= "Placeholder"
-Column_Headers=['Festival Name', 'Festival Date', 'Submission Link', 'Deadline Label', 'Deadline', 'Categories']
-RowsToInsert= []
-maxNumOfCategoriesChosen=0
-
-#When the user is presented with the possible categories they can apply for, this function ensures that the user keeps getting prompted until an acceptable answer is given so the program does not break
-def include_category():
-    placeholder = st.empty()
-    global categoryapplicationuniquekey
-
-    with placeholder.container().form("category" + str(categoryapplicationuniquekey)):
-        #st.write(str(categoryapplicationuniquekey))
-        answer = st.radio(
-        "Do you wish to apply to this category?",
-        [":green[Yes]", ":red[No]"])
-        submit_button = st.form_submit_button("Submit Final Answer")
-
-        if submit_button:
-            categoryapplicationuniquekey=categoryapplicationuniquekey+1 
-            placeholder.empty() 
-            if answer==":green[Yes]":
-                return True
-            else:
-                return False
-        
-
-def choose_payment(paymentOptionsParam):
-    placeholder = st.empty()
-    global paymentoptionuniquekey
-    with placeholder.container().form("payment" + str(paymentoptionuniquekey)):
-        #let user choose multiple choice what they want
-        choices=[]
-        for index, item in enumerate(paymentOptionsParam):
-            choices.append(index+1)
-        answer = st.radio(
-        "Which option do you choose? ",
-        choices, horizontal=True)
-
-        submit_button = st.form_submit_button("Submit Payment Choice")
-
-        if submit_button:
-            paymentoptionuniquekey= paymentoptionuniquekey+1
-            placeholder.empty()
-            return answer
-        
-
-def print_payment_options(all_li, name, col_index, row_index):
-    paymentcontainer = st.empty()
-    paymentOptions=[]
-    stringReturnValue=' '
-    with paymentcontainer.container():
-        for index, current_li in enumerate(all_li):
-            #if the current li is not outdated (aka if the deadline has NOT already passed), then consider it as viable payment option
-            if 'is-outdated' not in current_li['class']:
-                #Only consider deadline and payment option
-                if 'CategoryName' in current_li['class'] or 'Fee' in current_li['class']:
-                    #If the current element is a deadline label/name
-                    if 'CategoryName' in current_li['class']:
-                        currentDeadlineName = current_li.text.strip()
-                        
-                        st.markdown('<h6 style="color:purple"> For submitting your film to the ' + name.text + ' category by the '+ currentDeadlineName + ' deadline, here are the payment options </h6>', unsafe_allow_html=True)
-                    #If the current element is a payment option, print it out and after printing it out, ask the user which payment option they want
-                    elif 'Fee' in current_li['class']:
-                        #st.write("\t\t" + str(len(paymentOptions)+1) + ". "+ current_li.text.replace('\n', ' '))
-                        st.markdown("<h6 style='color:purple'>" + str(len(paymentOptions)+1) + ". "+ current_li.text.replace('\n', ' ')+ "</h6>", unsafe_allow_html=True)
-                        
-                        paymentOptions.append(current_li.text.replace('\n', ' '))
-                        #if the next element is a category element, then that means there are no more payment options so you ask user for which payment option they want to go with
-                        next = index + 1
-                        if next <= len(all_li) :
-                            #avoid index out of bounds error at the end
-                            if (next==len(all_li) or 'Fee' not in all_li[next]['class']):
-                                user_ans= choose_payment(paymentOptions)
-                                while user_ans==None:
-                                    time.sleep(0.5)
-                                if user_ans!=None:
-                                    st.info("You chose payment option " + paymentOptions[user_ans-1])
-                                    stringReturnValue+=paymentOptions[user_ans-1] + ','
-                                    #st.info(f''':violet[You chose payment option '{returnValue}']''')
-                                #This way, you only append once per label
-                                if (col_index<=0):
-                                    chosen_payment.append([]) 
-                                row_index=row_index+1
-                                chosen_payment[row_index].append(paymentOptions[user_ans-1]) 
-                                paymentOptions=[]  
-                                #increment to move onto the next deadline
-    #clear all info about payment options
-    paymentcontainer.empty()
-    returnValue=[]
-    returnValue.append(stringReturnValue) 
-    returnValue.append(col_index)
-    #returnValue.append(chosen_payment)
-    #returnValue.append(row_index)
-    #Here is how to interpret returnValue:
-    #   returnValue[0] = stringReturnValue
-    #   returnValue[1]=column index
-    #   returnValue[2]=chosen_payment
-    #st.write("\n Here is how info is stored in 2D array in print options function")
-    #st.write(chosen_payment)
-    return returnValue                             
-
-
-
-        
-
-    
-
-#(1) Asks the user which categories they will submit to
-#(2) Asks the user which payment method they would want to explore
-#@st.cache_data
-def find_all_categories(row_index, col_index):
-    global ans
-    global maxNumOfCategoriesChosen
-    CategoryNames = soup.findAll('span', attrs={'class':'festival-category-name'})
-    
-    #find description for the festival by finding the div nested 
-    # within the profile-categories_content div
-    CategoryDescriptions = [div.find('div') for div in soup.findAll('div', attrs={'class':'profile-categories__content'})]
-    #loop through each category and see if the user wants to apply to it
-    for name, description in zip(CategoryNames, CategoryDescriptions):
-        container = st.empty()
-        container.markdown('<h3> Category: ' + name.text.strip() + '</h3> \n' + '<h5>' + description.text.strip() + '</h5>', unsafe_allow_html=True)
-        #st.markdown('<h5>' + description.text.strip() + '</h5>', unsafe_allow_html=True)
-        ans = include_category()
-        #If the user wants to apply to the category, ask for which payment option they want to explore
-        while ans==None:
-            #as long as there is no answer, execution is delayed by 0.5 seconds
+        st.write("How many links do you want to submit to?")
+        col1, col2 = st.columns(2)
+        with col1:
+            one_button=st.button("One")
+        with col2:
+            more_button=st.button("More Than One (upload CSV file)")
+        while not one_button and not more_button:
             time.sleep(0.5)
-        if ans==True:
-            #st.info("You are applying to the category: " + name.text)
-            st.info(f''':green[You are applying to the category: {name.text}]''')
-            
-            chosen_categories.append(name.text)
-            #Access <ul class="ProfileDeadlines Small"> to get the payment options
-            all_profile_deadlines= description.next.next.next
-            #print(all_profile_deadlines.text)
-            all_li = all_profile_deadlines.findChildren()
-            user_ans=print_payment_options(all_li, name, col_index, row_index)
-            st.info(f''':violet[You chose payment option(s) '{user_ans[0]}' for all the deadlines in '{name.text}' category]''') 
-            #increment to move onto the next category
-            #user_ans[1]=column index
-            col_index=user_ans[1]+1
-            row_index=-1; 
-            #user_ans[2]= chosen payment
-            #chosen_payment=user_ans[2]
-        elif ans==False:
-            st.info(f''':red[You are NOT applying to the category: {name.text}]''') 
-        #decrease size as u traverse to avoid large data structure
-        container.empty()
-        #CategoryNames.remove(name)
-        #CategoryDescriptions.remove(description)
-     
-                                        
-                
-    #st.write()
-    #st.write("Here are the categories that you chose:")
-    #for x in chosen_categories:
-       # print(x) 
-    if len(chosen_categories) >= maxNumOfCategoriesChosen:
-        maxNumOfCategoriesChosen=len(chosen_categories)
-    #st.write("\n Here is how info is stored in 2D array")
-    #st.write(chosen_payment)
-    return ans
+    if one_button or more_button:
+        placeholder.empty()
+        if one_button:
+            singleLink=insertsinglelink()
+            while singleLink is None:
+                time.sleep(0.5)
+            #once single link has a vlue in it then append it to the end of festival_links
+            festival_links.append(singleLink)
+            return festival_links
+        else:
+            festival_links=uploadcsv()
+            while festival_links is None:
+                time.sleep(0.5)
+            if festival_links is not None:
+                return festival_links
+        
 
-#get present date so that you can see if a deadline has already passed
-present = datetime.now()
 
-#go through each film festival link one at a time
-currLinkIdx=0
-while currLinkIdx<len(festival_links):
+#executed the first time the app is run
+if 'submitted' not in st.session_state:
+    #maxNumOfCategoriesChosen=0
+    Links=choose_num_of_festival_links()
+    #st.write(Links)
+    wb = openpyxl.Workbook()
+    sheet = wb.active
+    sheet['A1']='Festival Name'
+    sheet['B1']='Festival Date'
+    sheet['C1']='Submission Link'
+    sheet['D1']='Deadline Label'
+    sheet['E1']='Deadline'
+    sheet['F1']='Categories'
+    st.session_state.Links=Links
+    st.session_state.workbook=wb
+    st.session_state.sheet=sheet
+
+    st.session_state.maxNumOfCategories=0
+    st.session_state.nextLineToWriteOn=2
+    st.session_state.linkIdx=0
+    #save links, workbook, and worksheet as session state so we can use later on
+    runFilmFestivals(Links[st.session_state.linkIdx])
+    st.session_state.linkIdx=st.session_state.linkIdx+1
+    #add 1 because header was added here
+    #st.session_state.nextLineToWriteOn= st.session_state.nextLineToWriteOn+1
     
-    #which categories the film will get submitted to
-    chosen_categories= []
-    #keep track of how many valid deadlines there are
-    valid_deadline_labels=[]
-    #For each valid deadline in each category, the user chooses a payment that appeals to them. 
-    #Right now, I stored it as 2D Array because that is how it is getting displayed in the spreadsheet, where the rows are deadline labels and the categories are the columns
-    chosen_payment = []
-    row_idx=-1 #corresponds to valid_deadline_labels
-    col_idx=0 #corresponds to chosen_categories
-    Placeholder_Rows=[' ', ' ', ' ', ' ', ' ']
-    #Placeholder_Rows=['debug', 'debug', 'debug']
 
-
-    #save the page you want to scrape as a variable
-    #page_to_scrape = requests.get(festival_links[currLinkIdx].strip())
-
-    page_to_scrape = ''
-    while page_to_scrape == '':
-        
-        try:
-            page_to_scrape = requests.get(festival_links[currLinkIdx].strip())
-            #st.write(page_to_scrape)
-            break
-        except:
-            st.write("Unable to retrieve the next link: " + festival_links[currLinkIdx].strip())
-            st.write("There is possibly an issue with the csv file/link you uploaded")
-            st.write("Let me retry in 5 seconds")
-            time.sleep(5)
-            st.write("If this issue persists, please report it.")
-            continue
-        
-        
-    #use beautiful soup to parse the data and save it in the variable soup
-    soup = BeautifulSoup(page_to_scrape.text, "html.parser")
-
-
-    NameOfFestival= soup.find('a', attrs={"data-ga-label":"Festival Name"})
-    #st.write("\nThe current festival is " + NameOfFestival.text + "\n")
-    st.markdown('<h1 style="color:blue;">' + NameOfFestival.text + '</h1>', unsafe_allow_html=True)
-
-
-    #Appends the chosen categories to the end of row_lines
-    ans=find_all_categories(row_idx, col_idx)
-    
-    for x in chosen_categories:
-        Placeholder_Rows.append(x)
-    RowsToInsert.append(Placeholder_Rows)
-    #clear to make streamlit faster
-    chosen_categories=[]
-
-    #FIND ALL THE ITEMS IN THE PAGE WITH A CLASS ATTRIBUTE OF 'TEXT'
-    #AND STORE THE LIST AS A VARIABLE
-    Deadlines = soup.findAll('time', attrs={'class':'ProfileFestival-datesDeadlines-time'})
-
-
-    #FIND ALL THE ITEMS IN THE PAGE WITH A CLASS ATTRIBUTE OF 'AUTHOR'
-    #AND STORE THE LIST AS A VARIABLE
-    DeadlineLabels = soup.findAll('div', attrs={"class":"ProfileFestival-datesDeadlines-deadline"})
-
-    for deadline, deadlinelabel in zip(Deadlines, DeadlineLabels):
-        if(deadlinelabel.text.strip() == "Event Date"):
-            eventdate=deadline.text.strip()
-
-    #LOOP THROUGH BOTH LISTS USING THE 'ZIP' FUNCTION
-    #AND PRINT AND FORMAT THE RESULTS
-    numOfDeadlinesPrinted=0
-    for deadline, deadlinelabel in zip(Deadlines, DeadlineLabels):
-        #the event date does not follow strptime properties
-        #notification date is unnecessary
-        if(deadlinelabel.text.strip() != "Event Date" and deadlinelabel.text.strip() != "Notification Date"):
-        #if(deadlinelabel.text.strip() != "Notification Date"):
-            #convert the date from text into datetime format
-            currentdate= datetime.strptime(deadline.text.strip(), "%B %d, %Y")
-            #if the deadline has not already passed then it is added to 
-            # the file
-            if (currentdate>present):
-                #print(deadline.text + " - " + deadlinelabel.text)
-                Spreadsheet_Row=[NameOfFestival.text.strip(), eventdate, festival_links[currLinkIdx].strip(), deadlinelabel.text.strip(), deadline.text.strip()]
-
-                #insert the chosen budget at the end of each line for each category
-                if (len(chosen_payment)> numOfDeadlinesPrinted):
-                    for x in chosen_payment[numOfDeadlinesPrinted]:
-                        Spreadsheet_Row.append(x)
-                
-                RowsToInsert.append(Spreadsheet_Row)
-                valid_deadline_labels.append(deadlinelabel.text.strip())
-                numOfDeadlinesPrinted=numOfDeadlinesPrinted + 1
-        
-    #move onto the next festival link
-    currLinkIdx=currLinkIdx+1
-    #Insert empty row between new film festivals
-    #RowsToInsert.append([' ', ' '])
-
-
-
-#the number of columns is Festival Name, Deadline Label, Deadline, and all categories
-#if no categories were chosen, then only 4 columns should be present
-if maxNumOfCategoriesChosen>0:
-    numOfColumns= 6 + (maxNumOfCategoriesChosen-1)
+#after you have downloaded the file
 else:
-    numOfColumns= 6
-#st.write("MaxNumberofCategoriesChosen is " + str(maxNumOfCategoriesChosen))
-#st.write("The number of columns is " + str(numOfColumns))
-#make sure that the column headers are accurate
-index=len(Column_Headers)
-while(index<numOfColumns):
-    Column_Headers.append(' ')
-    #Column_Headers.append('debug')
-    index=index+1
-#st.write("These are column headers: ") #debug
-#st.write(Column_Headers) #debug
-
-#ensure each row has complete data filled into the columns
-i=0
-#len(RowsToInsert) is number of rows and len(RowsToInsert[i]) is length of the individual row
-#st.write("The number of rows is: " + str(len(RowsToInsert)))
-while(i<len(RowsToInsert)):
-    #grab the current row and see how many elements are in it
-    currRowLength = len(RowsToInsert[i])
-    while currRowLength < numOfColumns:
-        RowsToInsert[i].append(' ')
-        #RowsToInsert[i].append('debug')
-        currRowLength=currRowLength+1
-    #st.write("These are the rows: ")
-    #st.write(RowsToInsert[i]) #debug
-    i=i+1
-
-
-df = pd.DataFrame(np.array(RowsToInsert),
-                   columns=Column_Headers)
-
-#st.dataframe(df.style.highlight_max(axis=0))
-
-#function to convert any dataframe to a csv file
-# IMPORTANT: Cache the conversion to prevent computation on every rerun
-@st.cache_data
-def convert_df(df):
-    return df.to_csv().encode('utf-8')
-
-#function to convert any dataframe to an excel file
-#taken from https://discuss.streamlit.io/t/download-button-for-csv-or-xlsx-file/17385/2
-@st.cache_data
-def to_excel(df):
-    output = BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    df.to_excel(writer, index=False, sheet_name='Sheet1')
-    workbook = writer.book
-    worksheet = writer.sheets['Sheet1']
-    #get range of occupied cells
-    #rangeOfWorksheet="A1:"+ chr(ord('@')+numOfColumns) + str(len(RowsToInsert)+1)
-    #all the cells that are occupied 
-    rangeOfWorksheet='A1:'+chr(ord('@')+numOfColumns)+str(len(RowsToInsert)+1)
-
-    #ensure text wraps, all cells all centered and vertically in the middle, and the border pixels is 1
-    #cell_format = workbook.add_format()
-    #cell_format.set_text_wrap()
-    #cell_format.set_align('vcenter')
-    #cell_format.set_border(1)
-
-
-    #put black in all blank spaces
-    format1 = workbook.add_format({
-        'bg_color': '#000000', 
-        'border_color': '#000000'}) 
-    worksheet.conditional_format(rangeOfWorksheet, {'type':  'blanks',
-                                       'format': format1})
-
-
-    #merge the same festival name, festival date, and submission link
-    merge_format = workbook.add_format({
-        'align': 'center', 
-        'valign': 'vcenter', 
-        'border': 1, 
-        'text_wrap': True })
-    #goes into each column (Festival Name, Festival Date, and Submission Link), locates which cells are the same and merges them together
-    CategoriesToMerge=['Festival Name', 'Festival Date', 'Submission Link']
-    i=0
-    while (i < len(CategoriesToMerge) ):
-        #code inspired from https://stackoverflow.com/questions/61217923/merge-rows-based-on-value-pandas-to-excel-xlsxwriter
-        for festName in df[CategoriesToMerge[i]].unique():
-            #ignore the blank spaces and keep it black
-            if festName != ' ':
-                # find indices and add one to account for header
-                u=df.loc[df[CategoriesToMerge[i]]==festName].index.values + 1
-
-                if len(u) <2: 
-                    pass # do not merge cells if there is only one car name
-                else:
-                    # merge cells using the first and last indices
-                    worksheet.merge_range(u[0], i, u[-1], i, df.loc[u[0],CategoriesToMerge[i]], merge_format)
-        i=i+1
-
-    
-    
-
-    #change column width to have more space for cell text and ensure all cells have wrapped text and a border of 1 px
-    all_cell_format=workbook.add_format({
-        'text_wrap': True, 
-        'border':1, 
-        'align': 'center', 
-        'valign': 'vcenter'}) 
-    worksheet.set_column("A:B", 17, all_cell_format)
-    worksheet.set_column("C:C", 23, all_cell_format)
-    worksheet.set_column("D:D", 18, all_cell_format)
-    worksheet.set_column("E:E", 16, all_cell_format)
-    #change column width so all categories are 13
-    rangeOfAllCategories = 'F:'+ chr(ord('@')+numOfColumns)
-    worksheet.set_column(rangeOfAllCategories, 16, all_cell_format)
+    #traverse Links until you reach the link that was just equal to it. Then, if there is a next one,move onto the next one. else, tell the user you have printed out everything
+    #justDownloaded=st.session_state.submitted 
+    #st.info("You have downloaded info for " + justDownloaded)
+    #once you click downloaded, the session state gets updated and you delete the button then u set it to undownloaded for the next festival
+    if st.session_state.downloaded ==True:
+        st.session_state.downloaded =False
+        st.session_state.downloadbtn.empty()
+    Links=st.session_state.Links
+    print(st.session_state.linkIdx)
+    if (st.session_state.linkIdx>= len(Links)):
+        st.write("Thank you for using this website. We are done with the link(s)")
+        #st.write(st.session_state.linkIdx)
+        st.cache_resource.clear()
+    else:
+        runFilmFestivals(Links[st.session_state.linkIdx])
+        st.session_state.linkIdx=st.session_state.linkIdx+1
 
 
 
-    
-
-   
-    #st.write("The range of worksheet is " + rangeOfWorksheet)
-    #format1 = workbook.add_format({'num_format': '0.00'}) 
-    #worksheet.set_column('A:A', None, format1) 
-
-
-    # set header format to gray background, increase font size and increase bottom border
-    header_format = workbook.add_format({
-        'bold': True,   
-        'align': 'center', 
-        'valign': 'vcenter', 
-        'bg_color': '#a6a6a6', 
-        'bottom': 2, 
-        'border':1})
-    worksheet.conditional_format('A1:'+chr(ord('@')+numOfColumns)+'1', {
-        'type': 'no_errors',
-        'format': header_format})
-    
-    #change size of top row
-    format_top_row = workbook.add_format({
-        'bold': True, 
-        'align': 'center', 
-        'valign': 'vcenter', 
-        'text_wrap': True, 
-        'border':1 })
-    worksheet.set_row(0, 30, format_top_row)
-
-    #Merge categories label
-    merge_categorieslabel=workbook.add_format({
-        'align': 'center', 
-        'valign': 'vcenter', 
-        'text_wrap': True, 
-        'bold': True,   
-        'bottom': 2, 
-        'bg_color': '#a6a6a6' })
-    worksheet.merge_range('F1:' + chr(ord('@')+numOfColumns) + '1', 'Categories', merge_categorieslabel)
-
-    #Freeze the first row and first column
-    worksheet.freeze_panes(1, 1) 
-    
 
 
 
-    writer.close()
-    processed_data = output.getvalue()
-    return processed_data
 
 
-#converting the sample dataframe to csv
-csv = convert_df(df)
 
-#convert sample dataframe to excel
-xls = to_excel(df)
 
-#adding a download button to download csv file
-st.download_button( 
-    label="Download Result as CSV",
-    data=csv,
-    file_name='CSV_Film_Festivals.csv',
-    mime='text/csv',
-    #on_click='st.cache_data.clear()'
-)
 
-#adding download button to dowload excel file
-st.download_button(
-    label='📥 Download Result as Excel Sheet (Recommended)', 
-    data=xls ,
-    file_name= 'Excel_Film_Festivals.xlsx',
-    #on_click='st.cache_data.clear()'
-)
+
+
+
+
+
+
+
