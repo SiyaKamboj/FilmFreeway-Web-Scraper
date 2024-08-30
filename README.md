@@ -12,7 +12,7 @@ Given a list of links to film festivals, this app web scrapes each link to retri
 - Atleast ONE category must be chosen for each film festival
 - The outputted csv/spreadsheet can be difficult to read and needs to be formatted
 
-## Version 2 (Current Version) 
+## Version 2
 ### Updates :)
 - You can now add a single link without needing to insert a csv file with multiple links  
 - You do NOT need to submit to at least one category per film festival. If needed, you can select no categories for a film festival and program will not break
